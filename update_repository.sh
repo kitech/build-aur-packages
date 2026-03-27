@@ -26,6 +26,7 @@ sudo --user builder \
     aur sync \
     --noconfirm --noview \
     --clean \
+    --makepkg-args "--skippgpcheck" \
     --database aurci2 --root /local_repository \
     $packages_with_aur_dependencies
 

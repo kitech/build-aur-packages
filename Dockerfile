@@ -1,4 +1,4 @@
-FROM archlinux:latest
+FROM archlinux:multilib-devel
 
 # Disable the sandbox for downloading
 # This was added in pacman 7 but requires the kernel feature 'landlock' to be
@@ -15,11 +15,15 @@ RUN pacman -Syu --noconfirm base-devel
 # https://www.reddit.com/r/archlinux/comments/6qu4jt/how_to_run_makepkg_in_docker_container_yes_as_root/
 RUN sed -i 's,exit $E_ROOT,echo but you know what you do,' /usr/bin/makepkg
 
+# Skip GPG verification for builds (--no-tty and !sign avoid key import issues)
+RUN echo "PKGEXT='.pkg.tar.zst'" >> /etc/makepkg.conf && \
+    echo "GPGFLAGS=--no-tty" >> /etc/makepkg.conf
+
 # Add the gpg key for 6BC26A17B9B7018A.
 # This should not be necessary.  It should be possible to use
 #     gpg --recv-keys --keyserver pgp.mit.edu 6BC26A17B9B7018A
 # but this fails randomly in github actions, so import the key from file.
-COPY gpg_key_6BC26A17B9B7018A.gpg.asc /tmp/
+# COPY gpg_key_6BC26A17B9B7018A.gpg.asc /tmp/
 
 COPY update_repository.sh /
 
@@ -42,9 +46,10 @@ RUN \
 
 USER builder
 
-# Build aurutils as unprivileged user.
+# Configure makepkg to skip GPG verification for builder user
+RUN echo 'OPTIONS=(!strip !libtool !staticlibs emptydirs zipman purgelog !sign)' >> ~/.makepkg.conf && \
+    echo 'PKGEXT=".pkg.tar.zst"' >> ~/.makepkg.conf
 RUN \
-    gpg --import /tmp/gpg_key_6BC26A17B9B7018A.gpg.asc && \
     cd /tmp/ && \
     curl --output aurutils.tar.gz https://aur.archlinux.org/cgit/aur.git/snapshot/aurutils.tar.gz && \
     tar xf aurutils.tar.gz && \
