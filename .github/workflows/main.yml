@@ -8,6 +8,8 @@ on:
 jobs:
   build_repository:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
 
     # Checkout repository content to run the action directly from the
@@ -21,6 +23,7 @@ jobs:
       with:
         packages: >
           go-do
+        token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: List generated Files
       run: ls -1 > ${{ github.workspace }}/files.txt

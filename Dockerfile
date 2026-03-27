@@ -9,7 +9,7 @@ RUN sed -i 's,#DisableSandbox,DisableSandbox,' /etc/pacman.conf
 # Note: update (-u) so that the newly installed tools use up-to-date packages.
 #       For example, gcc (in base-devel) fails if it uses an old glibc (from
 #       base image).
-RUN pacman -Syu --noconfirm base-devel
+RUN pacman -Syu --noconfirm base-devel pacman-contrib
 
 # Patch makepkg to allow running as root; see
 # https://www.reddit.com/r/archlinux/comments/6qu4jt/how_to_run_makepkg_in_docker_container_yes_as_root/
@@ -38,6 +38,13 @@ RUN \
     useradd -m -g alpm builder && \
     echo 'builder ALL = NOPASSWD: ALL' > /etc/sudoers.d/builder_pacman
 
+# Install GitHub CLI (gh) - download latest binary
+RUN GH_VERSION=$(curl -s https://api.github.com/repos/cli/cli/releases/latest | grep -oP '"tag_name":\s*"\K[^"]+') && \
+    curl -fsSL "https://github.com/cli/cli/releases/download/${GH_VERSION}/gh_${GH_VERSION#v}_linux_amd64.tar.gz" -o /tmp/gh.tar.gz && \
+    tar xzf /tmp/gh.tar.gz -C /tmp && \
+    cp -r /tmp/gh_${GH_VERSION#v}_linux_amd64/bin/gh /usr/local/bin/ && \
+    rm -rf /tmp/gh.tar.gz /tmp/gh_${GH_VERSION#v}_linux_amd64
+
 # Create a folder for the local repository.
 # This also needs to be accessible to `builder` and `alpm`.
 RUN \
@@ -46,8 +53,8 @@ RUN \
 
 USER builder
 
-# Configure makepkg to skip GPG verification for builder user
-RUN echo 'OPTIONS=(!strip !libtool !staticlibs emptydirs zipman purgelog !sign)' >> ~/.makepkg.conf && \
+# Configure makepkg for builder user
+RUN echo 'OPTIONS=(!strip !libtool !staticlibs emptydirs zipman)' >> ~/.makepkg.conf && \
     echo 'PKGEXT=".pkg.tar.zst"' >> ~/.makepkg.conf
 RUN \
     cd /tmp/ && \

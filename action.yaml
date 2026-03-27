@@ -24,6 +24,21 @@ inputs:
         are available from AUR.
     required: false
     default: ""
+  check_for_updates:
+    description: >
+        Check if packages have updates before building.
+        Downloads previous build info from release and compares versions.
+        Default: true
+    required: false
+    default: "true"
+    type: boolean
+  token:
+    description: >
+        GitHub token for GitHub CLI operations
+    required: false
+    default: ""
 runs:
   using: 'docker'
   image: 'Dockerfile'
+  env:
+    GH_TOKEN: ${{ inputs.token }}
