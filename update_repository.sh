@@ -4,6 +4,8 @@
 set -x
 
 echo "=== Debug: GH_TOKEN is: '${GH_TOKEN:0:10}...' (length: ${#GH_TOKEN})"
+echo "=== Debug: GH_TOKEN is: '${INPUT_TOKEN:0:10}...' (length: ${#INPUT_TOKEN})"
+echo "=== Debug: GH_TOKEN is: '${ACTION_RUNTIME_TOKEN:0:10}...' (length: ${#ACTION_RUNTIME_TOKEN})"
 
 if [ -z "$GH_TOKEN" ]; then
     echo "ERROR: GH_TOKEN environment variable is not set!"
@@ -32,13 +34,13 @@ if [ -n "$GH_TOKEN" ]; then
         cp "$PREV_DIR/aurci2.db.tar.gz" /local_repository/
         cp "$PREV_DIR/aurci2.files.tar.gz" /local_repository/
     fi
-    
+
     # Restore previously built packages (copy all .pkg.tar.zst files)
     # Use find instead of ls for more reliable globbing
     find "$PREV_DIR" -maxdepth 1 -name "*.pkg.tar.zst" -type f -exec cp {} /local_repository/ \;
     restored_count=$(ls /local_repository/*.pkg.tar.zst 2>/dev/null | wc -l)
     echo "Restored $restored_count packages to /local_repository"
-    
+
     # List packages from previous database
     echo "Packages in local repository:"
     pacman -Sy --noconfirm 2>/dev/null || true
@@ -88,7 +90,7 @@ get_aur_version() {
         echo "$result"
         return 0
     fi
-    
+
     echo ""
 }
 
@@ -110,7 +112,7 @@ packages_to_build=""
 for pkg in $packages_with_aur_dependencies; do
     aur_version=$(get_aur_version "$pkg")
     prev_version=$(get_prev_version "$pkg")
-    
+
     if [ -z "$prev_version" ]; then
         echo "  $pkg: not in previous release, building"
         packages_to_build="$packages_to_build $pkg"
@@ -137,16 +139,16 @@ else
 
     for pkg in $packages_to_build; do
         cd /tmp
-        
+
         # Check if package already exists in previous release (restored to local_repository)
         existing_pkg=$(ls /local_repository/${pkg}-*.pkg.tar.zst 2>/dev/null | head -1)
-        
+
         if [ -n "$existing_pkg" ]; then
             echo "Package $pkg already exists from previous release, adding to database"
             repo-add /local_repository/aurci2.db.tar.gz "$existing_pkg"
             continue
         fi
-        
+
         echo "Building $pkg..."
 
         if ! sudo --user builder aur fetch "$pkg"; then
