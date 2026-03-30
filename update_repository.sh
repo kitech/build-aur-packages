@@ -8,7 +8,7 @@ curl -v https://aur.archlinux.org/rpc
 
 AUR_DEBUG=1 aur depends --pkgname chez-scheme
 
-AUR_DEBUG=1 aur depends --pkgname chez-scheme lib32-libxpm fcitx sfwbar ydcv buku recutils deb2targz lib32-openssl-1.1 multitail libaegis netlify vercel openlist-bin qtscrcpy-bin bin32-firefox-bin emacs-locale-zh-cn emacs-lucid-lite getmail6 tp-battery-mode vdhcoapp-bin gtk2 gtk-theme-switch2 adwaita-dark lib32-gtk2 hexchat bin32-filezilla-bin tccx-git lib32-libmng lib32-unixodbc gtkspell betterbird-bin smplayer-qt4x sublime-text-2 deepseek-cli noorfetch
+AUR_DEBUG=1 aur depends --pkgname chez-scheme lib32-libxpm fcitx sfwbar ydcv buku
 
 echo "=== Debug: GH_TOKEN is: '${GH_TOKEN:0:10}...' (length: ${#GH_TOKEN})"
 echo "=== Debug: GH_TOKEN is: '${INPUT_TOKEN:0:10}...' (length: ${#INPUT_TOKEN})"
@@ -57,7 +57,7 @@ fi
 # Get list of packages with dependencies
 echo "Fetching AUR package info..."
 aur_depends_error=""
-for i in 1 2 3; do
+for i in 1; do
     packages_with_aur_dependencies="$(aur depends --pkgname $INPUT_PACKAGES $INPUT_MISSING_AUR_DEPENDENCIES 2>&1)"
     aur_depends_result=$?
     if [ $aur_depends_result -eq 0 ] && [ -n "$packages_with_aur_dependencies" ]; then
@@ -92,12 +92,20 @@ fi
 # Function to get AUR version
 get_aur_version() {
     local pkg="$1"
-    local result=$(curl -s "https://aur.archlinux.org/rpc/?v=5&type=info&arg=$pkg" | grep -oP '"Version":"\K[^"]+' | head -1)
-    if [ -n "$result" ]; then
-        echo "$result"
-        return 0
-    fi
 
+    if [ -d "/tmp/aurci2/pkgrepos/$pkg" ]; then
+	result=$(cd /tmp/aurci2/pkgrepos/$pkg && makepkg --printsrcinfo|grep pkgver|awk '{print $3}')
+	if [ -n "$result" ]; then
+	    echo "$result"
+	    return 0
+	fi
+    else
+	local result=$(curl -s "https://aur.archlinux.org/rpc/?v=5&type=info&arg=$pkg" | grep -oP '"Version":"\K[^"]+' | head -1)
+	if [ -n "$result" ]; then
+            echo "$result"
+            return 0
+	fi
+    fi
     echo ""
 }
 
@@ -158,7 +166,9 @@ else
 
         echo "Building $pkg..."
 
-        if ! sudo --user builder aur fetch "$pkg"; then
+	if [ -d "/pkgrepos/$pkg" ]; then
+	    cp -a /pkgrepos/$pkg $pkg
+        elif ! sudo --user builder aur fetch "$pkg"; then
             echo "Warning: Failed to fetch $pkg, skipping"
             continue
         fi

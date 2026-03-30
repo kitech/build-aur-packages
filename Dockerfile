@@ -9,7 +9,7 @@ RUN sed -i 's,#DisableSandbox,DisableSandbox,' /etc/pacman.conf
 # Note: update (-u) so that the newly installed tools use up-to-date packages.
 #       For example, gcc (in base-devel) fails if it uses an old glibc (from
 #       base image).
-RUN pacman -Syu --noconfirm base-devel pacman-contrib
+RUN pacman -Syu --noconfirm base-devel pacman-contrib git
 
 # Patch makepkg to allow running as root; see
 # https://www.reddit.com/r/archlinux/comments/6qu4jt/how_to_run_makepkg_in_docker_container_yes_as_root/
@@ -26,7 +26,8 @@ RUN echo "PKGEXT='.pkg.tar.zst'" >> /etc/makepkg.conf && \
 # COPY gpg_key_6BC26A17B9B7018A.gpg.asc /tmp/
 
 COPY update_repository.sh /
-
+# RUN  mkdir /pkgrepos
+# COPY pkgrepos /tmp/
 
 # Create a local user for building since aur tools should be run as normal user.
 # This user is in the `alpm` group, to ensure, that the files it generates are accessible
@@ -66,6 +67,7 @@ RUN \
     cp /tmp/aurutils/aurutils-*.pkg.tar.zst /local_repository/ && \
     repo-add /local_repository/aurci2.db.tar.gz /local_repository/aurutils-*.pkg.tar.zst
 
+RUN git clone --depth 1 https://github.com/kitech/aurci2.git /tmp/aurci2
 
 USER root
 # Note: Github actions require the dockerfile to be run as root, so do not
