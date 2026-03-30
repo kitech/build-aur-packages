@@ -23,7 +23,7 @@ export GH_REPO="$GITHUB_REPOSITORY"
 
 PREV_DIR="/tmp/prev_release"
 mkdir -p "$PREV_DIR"
-mkdir -p /local_repository
+mkdir -p /local_reposxitory
 
 # Download previous release assets
 if [ -n "$GH_TOKEN" ]; then
@@ -71,6 +71,7 @@ done
 # Check if aur depends failed
 if echo "$packages_with_aur_dependencies" | grep -qE "curl:|error:|Error:|failed|500"; then
     echo "ERROR: Failed to fetch AUR package info: $packages_with_aur_dependencies"
+    packages_with_aur_dependencies="$INPUT_PACKAGES $INPUT_MISSING_AUR_DEPENDENCIES"
     # exit 1
 fi
 
@@ -166,8 +167,8 @@ else
 
         echo "Building $pkg..."
 
-	if [ -d "/pkgrepos/$pkg" ]; then
-	    cp -a /pkgrepos/$pkg $pkg
+	if [ -d "/tmp/aurci2/pkgrepos/$pkg" ]; then
+	    cp -a /tmp/aurci2/pkgrepos/$pkg $pkg
         elif ! sudo --user builder aur fetch "$pkg"; then
             echo "Warning: Failed to fetch $pkg, skipping"
             continue

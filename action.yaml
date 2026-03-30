@@ -37,8 +37,14 @@ inputs:
         GitHub token for GitHub CLI operations
     required: false
     default: ""
+  uprepourl:
+    description: >
+        GitHub upstream repo that use this
+    required: false
+    default: ""
 runs:
   using: 'docker'
   image: 'Dockerfile'
   env:
     GH_TOKEN: ${{ inputs.token }}
+    GH_REPOURL: ${{ inputs.uprepourl }}
