@@ -96,7 +96,9 @@ get_aur_version() {
 
     if [ -d "/tmp/aurci2/pkgrepos/$pkg" ]; then
 	result=$(cd /tmp/aurci2/pkgrepos/$pkg && makepkg --printsrcinfo|grep pkgver|awk '{print $3}')
+	pkgrel=$(cd /tmp/aurci2/pkgrepos/$pkg && makepkg --printsrcinfo|grep pkgrel|awk '{print $3}')
 	if [ -n "$result" ]; then
+	    result="${result}-${pkgrel}"
 	    echo "$result"
 	    return 0
 	fi
@@ -135,6 +137,9 @@ for pkg in $packages_with_aur_dependencies; do
     elif [ "$aur_version" != "$prev_version" ]; then
         echo "  $pkg: $prev_version -> $aur_version (needs update)"
         packages_to_build="$packages_to_build $pkg"
+	# fix below detect exist with ${pkg}-*.pkg.tar.zst
+	rm -fv /tmp/prev_release/${pkg}-${prev_version:0:3}*.pkg.tar.zst
+	rm -fv /local_repository/${pkg}-${prev_version:0:3}*.pkg.tar.zst
     else
         echo "  $pkg: $aur_version (skip, no change)"
     fi
