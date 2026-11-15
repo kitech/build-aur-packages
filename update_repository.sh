@@ -23,7 +23,7 @@ export GH_REPO="$GITHUB_REPOSITORY"
 
 PREV_DIR="/tmp/prev_release"
 mkdir -p "$PREV_DIR"
-mkdir -p /local_reposxitory
+mkdir -p /local_repository
 
 # Download previous release assets
 if [ -n "$GH_TOKEN" ]; then
@@ -68,8 +68,12 @@ for i in 1; do
     sleep 5
 done
 
-# Check if aur depends failed
-if echo "$packages_with_aur_dependencies" | grep -qE "curl:|error:|Error:|failed|500"; then
+# Check if aur depends failed (exit code or error text such as
+# "AUR::Depends: target not found: <pkg>" which used to leak into the
+# package list and produce bogus builds named "target"/"not")
+if [ "${aur_depends_result:-1}" -ne 0 ] || \
+   echo "$packages_with_aur_dependencies" | grep -qE \
+       "curl:|error:|Error:|failed|500|^AUR::|target not found"; then
     echo "ERROR: Failed to fetch AUR package info: $packages_with_aur_dependencies"
     packages_with_aur_dependencies="$INPUT_PACKAGES $INPUT_MISSING_AUR_DEPENDENCIES"
     # exit 1
@@ -134,7 +138,7 @@ for pkg in $packages_with_aur_dependencies; do
     if [ -z "$prev_version" ]; then
         echo "  $pkg: not in previous release, building"
         packages_to_build="$packages_to_build $pkg"
-    elif [ "$aur_version" != "$prev_version" ]; then
+    elif [ "$(printf %s "$aur_version" | tr ':' '.')" != "$prev_version" ]; then
         echo "  $pkg: $prev_version -> $aur_version (needs update)"
         packages_to_build="$packages_to_build $pkg"
 	# fix below detect exist with ${pkg}-*.pkg.tar.zst
@@ -146,27 +150,18 @@ for pkg in $packages_with_aur_dependencies; do
 done
 packages_to_build="${packages_to_build# }"
 
-if [ -z "$packages_to_build" ]; then
-    echo "No packages need building, ensuring database is up to date"
-    # Add all restored packages to database
-    for pkgfile in /local_repository/*.pkg.tar.zst; do
-        if [ -f "$pkgfile" ]; then
-            echo "Adding $pkgfile to database..."
-            repo-add /local_repository/aurci2.db.tar.gz "$pkgfile"
-        fi
-    done
-else
+if [ -n "$packages_to_build" ]; then
     echo "Building packages: $packages_to_build"
 
     for pkg in $packages_to_build; do
         cd /tmp
 
-        # Check if package already exists in previous release (restored to local_repository)
-        existing_pkg=$(ls /local_repository/${pkg}-*.pkg.tar.zst 2>/dev/null | head -1)
+        # Check if the exact target version already exists from previous release
+        target_version=$(get_aur_version "$pkg")
+        existing_pkg=$(ls /local_repository/${pkg}-$(printf %s "$target_version" | tr ':' '.')-*.pkg.tar.zst 2>/dev/null | head -1)
 
         if [ -n "$existing_pkg" ]; then
-            echo "Package $pkg already exists from previous release, adding to database"
-            repo-add /local_repository/aurci2.db.tar.gz "$existing_pkg"
+            echo "Package $pkg already exists from previous release, skipping build"
             continue
         fi
 
@@ -199,12 +194,36 @@ else
 
         for pkgfile in ./*.pkg.tar.zst; do
             if [ -f "$pkgfile" ]; then
-                echo "Adding $pkgfile to repository..."
+                echo "Copying $pkgfile to repository..."
                 cp "$pkgfile" /local_repository/
-                repo-add /local_repository/aurci2.db.tar.gz "$pkgfile"
             fi
         done
     done
+fi
+
+# Sanitize package filenames for GitHub release assets: ':' is not allowed
+# and gets replaced by '.' on upload, which would make the db filename and
+# the actual asset name (pacman download URL) diverge. Rename before repo-add.
+for _f in /local_repository/*:*.pkg.tar.zst; do
+    if [ -e "$_f" ]; then
+        _g="$(printf %s "$_f" | tr ':' '.')"
+        echo "Sanitizing asset name: $(basename "$_f") -> $(basename "$_g")"
+        mv -v "$_f" "$_g"
+    fi
+done
+unset _f _g
+
+# Reconcile the database with every package file in /local_repository.
+# Skipped packages ("skip, no change") are never repo-add'ed, so a package
+# missing from a previously restored db (e.g. zenoh-c 1.10.2-1) would stay
+# missing forever. Sorting by version before a single repo-add call makes the
+# newest version win and prunes stale entries (aurutils 20.5.8 vs 23-1).
+echo "Reconciling database with all local packages..."
+mapfile -t _all_pkgs < <(ls -1 /local_repository/*.pkg.tar.zst 2>/dev/null | sort -V)
+if [ ${#_all_pkgs[@]} -gt 0 ]; then
+    repo-add /local_repository/aurci2.db.tar.gz "${_all_pkgs[@]}"
+else
+    echo "WARNING: no package files found in /local_repository"
 fi
 
 # Upload to release
