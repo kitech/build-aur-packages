@@ -231,31 +231,36 @@ if [ -n "$GH_TOKEN" ]; then
     echo "Uploading to release..."
     cd /local_repository
 
-    # Debug: list files in local_repository
-    echo "Files in /local_repository:"
-    ls -la /local_repository/
+    if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+        # 已有资产名。老包一个字节都不动：--clobber 对老包是"先删后传"，
+        # 中途失败会永久丢包，所以只上传 release 上还不存在的文件名。
+        mapfile -t _existing < <(gh release view "$RELEASE_TAG" --json assets \
+            -q '.assets[].name' 2>/dev/null | sort)
+        declare -A _have=()
+        for _n in "${_existing[@]}"; do _have["$_n"]=1; done
 
-    # Collect files to upload
-    upload_files=""
-    for f in *.pkg.tar.zst aurci2.db.tar.gz aurci2.files.tar.gz; do
-        if [ -f "$f" ]; then
-            echo "  Adding to upload: $f"
-            upload_files="$upload_files $f"
+        _new_pkgs=()
+        for f in *.pkg.tar.zst; do
+            [ -f "$f" ] || continue
+            if [ -n "${_have[$f]:-}" ]; then
+                echo "  Unchanged on release, skipping: $f"
+            else
+                echo "  New package: $f"
+                _new_pkgs+=("$f")
+            fi
+        done
+
+        # 数据库每轮必变，必须覆盖
+        echo "Updating release..."
+        if [ ${#_new_pkgs[@]} -gt 0 ]; then
+            gh release upload "$RELEASE_TAG" "${_new_pkgs[@]}" --clobber || {
+                echo "ERROR: failed to upload new packages"; exit 1; }
         fi
-    done
-
-    if [ -z "$upload_files" ]; then
-        echo "ERROR: No files to upload!"
+        gh release upload "$RELEASE_TAG" aurci2.db.tar.gz aurci2.files.tar.gz --clobber || {
+            echo "ERROR: failed to upload repository databases"; exit 1; }
+        unset _have _existing _new_pkgs _n
     else
-        echo "Files to upload: $upload_files"
-        # Only update existing release, don't create new one
-        if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "Updating existing release..."
-            gh release upload "$RELEASE_TAG" $upload_files --clobber
-            echo "Upload exit code: $?"
-        else
-            echo "No existing release found, skipping upload"
-        fi
+        echo "No existing release found, skipping upload"
     fi
 fi
 
