@@ -232,33 +232,37 @@ if [ -n "$GH_TOKEN" ]; then
     cd /local_repository
 
     if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-        # 已有资产名。老包一个字节都不动：--clobber 对老包是"先删后传"，
-        # 中途失败会永久丢包，所以只上传 release 上还不存在的文件名。
-        mapfile -t _existing < <(gh release view "$RELEASE_TAG" --json assets \
-            -q '.assets[].name' 2>/dev/null | sort)
-        declare -A _have=()
-        for _n in "${_existing[@]}"; do _have["$_n"]=1; done
+        # 已有资产：按 sha256 digest 判断内容是否真的没变。
+        # 不能只按文件名判重——同名包可能被重新构建（新 checksum），
+        # 跳过上传会让 release 保留旧包、而 db 记录新 checksum，
+        # 最终 pacman -S 报 "invalid or corrupted package (checksum)"。
+        declare -A _digest=()
+        while IFS=$'\t' read -r _n _d; do
+            [ -n "$_n" ] && _digest["$_n"]="$_d"
+        done < <(gh api "repos/${GH_REPO}/releases/tags/${RELEASE_TAG}" \
+            --jq '.assets[] | [.name, (.digest // "")] | @tsv' 2>/dev/null)
 
-        _new_pkgs=()
+        _upload_pkgs=()
         for f in *.pkg.tar.zst; do
             [ -f "$f" ] || continue
-            if [ -n "${_have[$f]:-}" ]; then
+            _local_digest="sha256:$(sha256sum "$f" | awk '{print $1}')"
+            if [ -n "${_digest[$f]:-}" ] && [ "${_digest[$f]}" = "$_local_digest" ]; then
                 echo "  Unchanged on release, skipping: $f"
             else
-                echo "  New package: $f"
-                _new_pkgs+=("$f")
+                echo "  New/changed package: $f"
+                _upload_pkgs+=("$f")
             fi
         done
 
         # 数据库每轮必变，必须覆盖
         echo "Updating release..."
-        if [ ${#_new_pkgs[@]} -gt 0 ]; then
-            gh release upload "$RELEASE_TAG" "${_new_pkgs[@]}" --clobber || {
+        if [ ${#_upload_pkgs[@]} -gt 0 ]; then
+            gh release upload "$RELEASE_TAG" "${_upload_pkgs[@]}" --clobber || {
                 echo "ERROR: failed to upload new packages"; exit 1; }
         fi
         gh release upload "$RELEASE_TAG" aurci2.db.tar.gz aurci2.files.tar.gz --clobber || {
             echo "ERROR: failed to upload repository databases"; exit 1; }
-        unset _have _existing _new_pkgs _n
+        unset _digest _upload_pkgs _n _d _local_digest
     else
         echo "No existing release found, skipping upload"
     fi
