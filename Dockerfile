@@ -67,7 +67,9 @@ RUN \
     cp /tmp/aurutils/aurutils-*.pkg.tar.zst /local_repository/ && \
     repo-add /local_repository/aurci2.db.tar.gz /local_repository/aurutils-*.pkg.tar.zst
 
-RUN git clone --depth 1 https://github.com/kitech/aurci2.git /tmp/aurci2
+# The package repository is cloned at container runtime by update_repository.sh.
+# Cloning it here would be cached in a Docker layer and can leave CI with an
+# outdated snapshot of pkgrepos/.
 
 USER root
 # Note: Github actions require the dockerfile to be run as root, so do not

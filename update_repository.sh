@@ -21,6 +21,12 @@ fi
 
 export GH_REPO="$GITHUB_REPOSITORY"
 
+# Always use the current master snapshot of the package repository. Do this at
+# runtime instead of in the Dockerfile, otherwise a cached image layer can
+# leave the builder with stale PKGBUILDs and missing local source files.
+rm -rf /tmp/aurci2
+git clone --depth 1 https://github.com/kitech/aurci2.git /tmp/aurci2
+
 PREV_DIR="/tmp/prev_release"
 mkdir -p "$PREV_DIR"
 mkdir -p /local_repository
@@ -75,7 +81,7 @@ if [ "${aur_depends_result:-1}" -ne 0 ] || \
    echo "$packages_with_aur_dependencies" | grep -qE \
        "curl:|error:|Error:|failed|500|^AUR::|target not found"; then
     echo "ERROR: Failed to fetch AUR package info: $packages_with_aur_dependencies"
-    packages_with_aur_dependencies="$INPUT_PACKAGES $INPUT_MISSING_AUR_DEPENDENCIES"
+    packages_with_aur_dependencies="$INPUT_MISSING_AUR_DEPENDENCIES $INPUT_PACKAGES"
     # exit 1
 fi
 
